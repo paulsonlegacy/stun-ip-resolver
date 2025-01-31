@@ -1,10 +1,11 @@
-from cachetools import LRUCache, cached
+from cachetools import LRUCache
+
+
 
 class IPResolverCache:
-    def __init__(self, max_size=100, ):
+    def __init__(self, max_size=100):
         self.cache = LRUCache(maxsize=max_size)
 
-    @cached(cache=lambda self: self.cache)
     def get_cached_info(self, ip):
         """Retrieve cached STUN info for a given IP."""
         return self.cache.get(ip, None)  # Returns full STUN info if available
@@ -20,4 +21,3 @@ class IPResolverCache:
     def clear_cache(self):
         """Clear the cache."""
         self.cache.clear()
-

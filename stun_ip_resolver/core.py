@@ -14,8 +14,7 @@ class STUNClient:
         try:
             # Check cache first (based on IP)
             for cached_ip in self.cache.cache.keys():  
-                print("Traversing through the cache")
-                print(type(self.cache.get_cached_info))
+                print("Searching through the cache..")
                 stun_infos = self.cache.get_cached_info(cached_ip)
 
                 if stun_infos:
@@ -26,7 +25,7 @@ class STUNClient:
             print("Fetching new STUN data...")
             loop = asyncio.get_running_loop()
             nat_type, ip, port = await loop.run_in_executor(
-                None, stun.get_ip_info, "0.0.0.0", self.stun_server, self.stun_port
+                None, stun.get_ip_info, "0.0.0.0", 54320, self.stun_server, self.stun_port
             )
 
             # STUN info
