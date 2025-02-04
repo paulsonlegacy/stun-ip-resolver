@@ -1,59 +1,15 @@
 import asyncio, stun, sqlite3, time
 from stun_ip_resolver.cache import *
 from stun_ip_resolver.exceptions import STUNResolutionError
+from stun_ip_resolver.utils import get_user_id
 
 
 class STUNClient:
-    def __init__(self, stun_server="stun.l.google.com", stun_port=19302, cache_backend="memory", ttl=300, **cache_kwargs):
+    def __init__(self, stun_server="stun.l.google.com", stun_port=19302, cache_backend="file", ttl=300, **cache_kwargs): #TTL is in seconds
         """Initialize STUN client with caching support."""
         self.stun_server = stun_server
         self.stun_port = stun_port
         self.cache = IPResolverCache(backend=cache_backend, ttl=ttl, **cache_kwargs)
-
-    async def get_stun_info(self):
-        """Retrieve NAT type, external IP, and external port using configurable caching."""
-        timestamp = time.time() # Current timestamp
-        try:
-            print("Checking cache for STUN info...")
-            
-            # Check cache for STUN info
-            cached_ip = self._get_cached_ips()
-            if cached_ip:
-                stun_infos = self.cache.get_cached_info(cached_ip[0])  # Fetch first IP stored
-                if stun_infos:
-                    print("Found STUN info in cache...")
-                    return stun_infos
-            
-            # If not found in cache, query the STUN server
-            print("Fetching new STUN data from server...")
-            loop = asyncio.get_running_loop()
-            nat_type, ip, port = await loop.run_in_executor(
-                None, stun.get_ip_info, "0.0.0.0", 54320, self.stun_server, self.stun_port
-            )
-            # Save to cache
-            self.cache.cache_stun_info(ip, port, nat_type, timestamp)
-            # Stun infos in dictionary/json
-            stun_infos = {
-                "data": {"ip": ip, "port": port, "nat_type": nat_type}, 
-                "timestamp": timestamp
-            }
-            return stun_infos
-
-        except Exception as e:
-            raise STUNResolutionError(f"Failed to retrieve STUN Info: {e}")
-
-
-    async def get_public_ip(self):
-        stun_info = await self.get_stun_info()
-        return stun_info["data"]["ip"]
-
-    async def get_public_port(self):
-        stun_info = await self.get_stun_info()
-        return stun_info["data"]["port"]
-
-    async def get_nat_type(self):
-        stun_info = await self.get_stun_info()
-        return stun_info["data"]["nat_type"]
 
     def _get_cached_ips(self):
         """Retrieve all cached IPs based on backend type."""
@@ -74,17 +30,74 @@ class STUNClient:
 
         return []
 
+    async def get_stun_info(self, request=None):
+        """Retrieve NAT type, external IP, and external port using configurable caching."""
+
+        timestamp = time.time()  # Current timestamp
+
+        try:
+            print("Checking cache for STUN info...")
+            
+            # Determine user ID (web app users get request.user.id, CLI users get machine UUID)
+            user_id = get_user_id(request)
+
+            # Check cache for STUN info
+            cached_ip = self._get_cached_ips()
+            if cached_ip:
+                stun_infos = self.cache.get_cached_info(user_id)
+                if stun_infos:
+                    print("Found STUN info in cache...")
+                    return stun_infos
+            
+            # If not found in cache, query the STUN server
+            print("Fetching new STUN data from server...")
+            loop = asyncio.get_running_loop()
+            nat_type, ip, port = await loop.run_in_executor(
+                None, stun.get_ip_info, "0.0.0.0", 54320, self.stun_server, self.stun_port
+            )
+            # Save to cache
+            self.cache.cache_stun_info(user_id, ip, port, nat_type, timestamp)
+            
+            # Stun info dictionary
+            stun_infos = {
+                "user_id": user_id,
+                "data": {"ip": ip, "port": port, "nat_type": nat_type}, 
+                "timestamp": timestamp
+            }
+            return stun_infos
+
+        except Exception as e:
+            raise STUNResolutionError(f"Failed to retrieve STUN Info: {e}")
 
 
-# Run async functions properly
+    async def get_user_id(self, request=None):
+        stun_info = await self.get_stun_info(request)
+        return stun_info["user_id"]
+    
+    async def get_public_ip(self, request=None):
+        stun_info = await self.get_stun_info(request)
+        return stun_info["data"]["ip"]
+
+    async def get_public_port(self, request=None):
+        stun_info = await self.get_stun_info(request)
+        return stun_info["data"]["port"]
+
+    async def get_nat_type(self, request=None):
+        stun_info = await self.get_stun_info(request)
+        return stun_info["data"]["nat_type"]
+
+
+# Run async functions properly (CLI only, no request object)
 async def main():
     client = STUNClient(cache_backend="sqlite")  # Change to "memory", "file", "sqlite", "redis" as needed
     stun_info = await client.get_stun_info()
     print(stun_info)
+    print("User ID:", await client.get_user_id())
+    print("Public IP:", await client.get_public_ip())
     print("Public Port:", await client.get_public_port())
     print("NAT Type:", await client.get_nat_type())
-    print("Public IP:", await client.get_public_ip())
 
 
-# Execute
-asyncio.run(main())
+# Execute for CLI only
+if __name__ == "__main__":
+    asyncio.run(main())

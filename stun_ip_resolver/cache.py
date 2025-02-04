@@ -38,20 +38,24 @@ class InMemoryCache:
         """Initialize TTL cache with a max size and expiration time (TTL)."""
         self.cache = TTLCache(maxsize=max_size, ttl=ttl)
 
-    def get_cached_info(self, ip):
+    def get_cached_info(self, user_id):
         """Retrieve STUN info if available in cache."""
-        return self.cache.get(ip)
+        return self.cache.get(user_id)
 
-    def cache_stun_info(self, ip, port, nat_type, timestamp):
+    def cache_stun_info(self, user_id, ip, port, nat_type, timestamp):
         """Store STUN info in cache."""
-        self.cache[ip] = {
+        self.cache[user_id] = {
+            "user_id": user_id,
             "data": {"ip": ip, "port": port, "nat_type": nat_type},
             "timestamp": timestamp,
         }
 
-    def clear_cache(self):
-        """Clear the entire cache."""
-        self.cache.clear()
+    def clear_cache(self, user_id=None):
+        """Clear cache for a specific user_id or all if None."""
+        if user_id:
+            self.cache.pop(user_id, None)  # Remove specific user_id if it exists
+        else:
+            self.cache.clear()  # Clear entire cache if no user_id is specified
 
 
 # ================================
@@ -63,17 +67,18 @@ class FileCache:
         self.ttl = ttl
         self.cache = self._load_cache()  # ✅ Load cache properly
 
-    def cache_stun_info(self, ip, port, nat_type, timestamp):
+    def cache_stun_info(self, user_id, ip, port, nat_type, timestamp):
         """Store STUN info in a file with timestamps."""
-        self.cache[ip] = {
+        self.cache[user_id] = {
+            "user_id": user_id,
             "data": {"ip": ip, "port": port, "nat_type": nat_type},
             "timestamp": timestamp,
         }
         self._save_cache()
 
-    def get_cached_info(self, ip):
+    def get_cached_info(self, user_id):
         """Retrieve cached STUN info if valid."""
-        entry = self.cache.get(ip, None)  # ✅ Now `self.cache` is a dictionary
+        entry = self.cache.get(user_id, None)  # ✅ Now `self.cache` is a dictionary
         if not entry or "timestamp" not in entry:
             return None
         if time.time() - entry["timestamp"] < self.ttl:
@@ -95,6 +100,13 @@ class FileCache:
         with open(self.file_path, "w") as f:
             json.dump(self.cache, f, ensure_ascii=False, indent=4)
 
+    def clear_cache(self, user_id=None):
+        """Clear cache for a specific user_id or all if None."""
+        if user_id:
+            self.cache.pop(user_id, None)  # Remove specific entry
+        else:
+            self.cache.clear()  # Clear entire cache
+        self._save_cache()  # Save updated cache to file
 
 
 # ================================
@@ -112,7 +124,8 @@ class SQLiteCache:
             conn.execute(
                 """
                     CREATE TABLE IF NOT EXISTS stun_cache (
-                        ip TEXT PRIMARY KEY,
+                        user_id VARCHAR(100) PRIMARY KEY,
+                        ip TEXT,
                         port INTEGER,
                         nat_type TEXT,
                         timestamp REAL
@@ -120,29 +133,38 @@ class SQLiteCache:
                 """
             )
 
-    def cache_stun_info(self, ip, port, nat_type, timestamp):
+    def cache_stun_info(self, user_id, ip, port, nat_type, timestamp):
         """Insert STUN info with timestamp."""
         with sqlite3.connect(self.db_path) as conn:
             conn.execute(
-                "REPLACE INTO stun_cache (ip, port, nat_type, timestamp) VALUES (?, ?, ?, ?)",
-                (ip, port, nat_type, timestamp),
+                "REPLACE INTO stun_cache (user_id, ip, port, nat_type, timestamp) VALUES (?, ?, ?, ?, ?)",
+                (user_id, ip, port, nat_type, timestamp),
             )
 
-    def get_cached_info(self, ip):
+    def get_cached_info(self, user_id):
         """Retrieve STUN info if not expired, otherwise delete it."""
         with sqlite3.connect(self.db_path) as conn:
-            cursor = conn.execute("SELECT ip, port, nat_type, timestamp FROM stun_cache WHERE ip=?", (ip,))
+            cursor = conn.execute("SELECT * FROM stun_cache WHERE user_id=?", (user_id,))
             row = cursor.fetchone()
             if row:
                 current_time = time.time()
-                if current_time - row[3] < self.ttl:
+                if current_time - row[4] < self.ttl:
                     return {
-                        "data": {"ip": row[0], "port": row[1], "nat_type": row[2]},
-                        "timestamp": row[3],
+                        "user_id": row[0],
+                        "data": {"ip": row[1], "port": row[2], "nat_type": row[3]},
+                        "timestamp": row[4],
                     }
-                conn.execute("DELETE FROM stun_cache WHERE ip=?", (ip,))   # Cleanup expired entry
+                conn.execute("DELETE FROM stun_cache WHERE user_id=?", (user_id,))   # Cleanup expired entry
         return None
 
+    def clear_cache(self, user_id=None):
+        """Clear cache for a specific user_id or all if None."""
+        with sqlite3.connect(self.db_path) as conn:
+            if user_id:
+                conn.execute("DELETE FROM stun_cache WHERE user_id=?", (user_id,))
+            else:
+                conn.execute("DELETE FROM stun_cache")  # Clear all cache entries
+            conn.commit()
 
 
 # ================================
@@ -153,21 +175,29 @@ class RedisCache:
         self.redis = redis.from_url(redis_url)
         self.ttl = ttl
 
-    def cache_stun_info(self, ip, port, nat_type, timestamp):
+    def cache_stun_info(self, user_id, ip, port, nat_type, timestamp):
         """Cache STUN info with automatic expiry."""
         data = json.dumps({
+            "user_id": user_id,
             "data": {"ip": ip, "port": port, "nat_type": nat_type},
             "timestamp": timestamp,
         })
-        self.redis.setex(ip, self.ttl, data)  # Automatically expires after `ttl` seconds
+        self.redis.setex(user_id, self.ttl, data)  # Automatically expires after `ttl` seconds
 
-    def get_cached_info(self, ip):
+    def get_cached_info(self, user_id):
         """Retrieve STUN info if available (Redis auto-deletes expired keys)."""
-        data = self.redis.get(ip)
+        data = self.redis.get(user_id)
         try:
             return json.loads(data) if data else None
         except json.JSONDecodeError:
             return None
+
+    def clear_cache(self, user_id=None):
+        """Clear cache for a specific user_id or all if None."""
+        if user_id:
+            self.redis.delete(user_id)  # Remove specific key
+        else:
+            self.redis.flushdb()  # Clear entire Redis cache (dangerous in production)
 
 
 # ================================
@@ -187,14 +217,14 @@ class IPResolverCache:
         else:
             raise ValueError("Invalid cache backend. Use 'memory', 'file', 'sqlite', or 'redis'.")
 
-    def get_cached_info(self, ip):
+    def get_cached_info(self, user_id):
         """Retrieve cached STUN info if available."""
-        return self.cache.get_cached_info(ip)
+        return self.cache.get_cached_info(user_id)
 
-    def cache_stun_info(self, ip, port, nat_type, timestamp):
+    def cache_stun_info(self, user_id, ip, port, nat_type, timestamp):
         """Store STUN info in cache."""
-        self.cache.cache_stun_info(ip, port, nat_type, timestamp)
+        self.cache.cache_stun_info(user_id, ip, port, nat_type, timestamp)
 
-    def clear_cache(self):
-        """Clear all cached data."""
-        self.cache.clear_cache()
+    def clear_cache(self, user_id=None):
+        """Clear cache for a specific user_id or all if None."""
+        self.cache.clear_cache(user_id)
