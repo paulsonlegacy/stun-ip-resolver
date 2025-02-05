@@ -1,7 +1,7 @@
 import asyncio, stun, sqlite3, time
-from stun_ip_resolver.cache import *
-from stun_ip_resolver.exceptions import STUNResolutionError
-from stun_ip_resolver.utils import get_user_id
+from conexia.cache import *
+from conexia.exceptions import STUNResolutionError
+from conexia.utils import get_user_id
 
 
 class STUNClient:

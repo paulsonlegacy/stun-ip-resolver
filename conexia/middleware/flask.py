@@ -1,8 +1,8 @@
 import asyncio
 from flask import request
-from stun_ip_resolver.core import STUNClient
-from stun_ip_resolver.cache import IPResolverCache
-from stun_ip_resolver.utils import get_user_id
+from conexia.core import STUNClient
+from conexia.cache import IPResolverCache
+from conexia.utils import get_user_id
 
 class STUNIPMiddleware:
     def __init__(self, app):
