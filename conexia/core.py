@@ -46,7 +46,7 @@ class STUNClient:
             if cached_ip:
                 stun_infos = self.cache.get_cached_info(user_id)
                 if stun_infos:
-                    print("Found STUN info in cache...")
+                    print("Found STUN info in cache")
                     return stun_infos
             
             # If not found in cache, query the STUN server
@@ -85,19 +85,3 @@ class STUNClient:
     async def get_nat_type(self, request=None):
         stun_info = await self.get_stun_info(request)
         return stun_info["data"]["nat_type"]
-
-
-# Run async functions properly (CLI only, no request object)
-async def main():
-    client = STUNClient(cache_backend="sqlite")  # Change to "memory", "file", "sqlite", "redis" as needed
-    stun_info = await client.get_stun_info()
-    print(stun_info)
-    print("User ID:", await client.get_user_id())
-    print("Public IP:", await client.get_public_ip())
-    print("Public Port:", await client.get_public_port())
-    print("NAT Type:", await client.get_nat_type())
-
-
-# Execute for CLI only
-if __name__ == "__main__":
-    asyncio.run(main())

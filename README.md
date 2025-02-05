@@ -29,13 +29,13 @@ pip install .
 from conexio import IPResolverCache
 
 # Choose a backend: "memory", "file", "sqlite", or "redis"
-cache = IPResolverCache(backend="memory", ttl=300)
+cache = IPResolverCache(backend="file", ttl=300)
 
 # Store STUN info
 cache.cache_stun_info(user_id="device123", ip="192.168.1.10", port=3478, nat_type="Full Cone", timestamp=1691234567)
 
 # Retrieve STUN info
-stun_info = cache.get_cached_info(user_id="device123")
+stun_info = cache.get_stun_info(user_id="device123")
 print(stun_info)
 ```
 
@@ -76,16 +76,7 @@ cache = IPResolverCache(backend="sqlite", ttl=300)
 
 def get_ip(request):
     user_id = str(request.user.id)  # Get unique user ID
-    stun_info = cache.get_cached_info(user_id)
-    if not stun_info:
-        # Simulated STUN fetch (Replace with real logic)
-        stun_info = {
-            "user_id": user_id,
-            "data": {"ip": "192.168.1.10", "port": 3478, "nat_type": "Full Cone"},
-            "timestamp": 1691234567,
-        }
-        cache.cache_stun_info(**stun_info)
-
+    stun_info = cache.get_stun_info(user_id)
     return JsonResponse(stun_info)
 ```
 
@@ -107,16 +98,7 @@ cache = IPResolverCache(backend="redis", ttl=300)
 
 @app.route("/get_ip/<user_id>")
 def get_ip(user_id):
-    stun_info = cache.get_cached_info(user_id)
-    if not stun_info:
-        # Simulated STUN fetch (Replace with real logic)
-        stun_info = {
-            "user_id": user_id,
-            "data": {"ip": "192.168.1.10", "port": 3478, "nat_type": "Full Cone"},
-            "timestamp": 1691234567,
-        }
-        cache.cache_stun_info(**stun_info)
-
+    stun_info = cache.get_stun_info(user_id)
     return jsonify(stun_info)
 
 if __name__ == "__main__":
