@@ -1,38 +1,23 @@
-import asyncio
 from conexia.core import STUNClient
-from conexia.cache import IPResolverCache
-from conexia.utils import get_user_id
 
 class STUNIPMiddleware:
     def __init__(self, get_response):
         self.get_response = get_response
-        self.stun_client = STUNClient()
-        self.cache = IPResolverCache()
+        self.stun_client = STUNClient(cache_backend="file")
 
-    def __call__(self, request):
-        # Get the user ID (authenticated user or machine UUID)
-        user_id = get_user_id(request)
-
-        # Check if the data is cached
-        cached_data = self.cache.get_cached_info(user_id)
-
-        if cached_data:
-            ip = cached_data["data"]["ip"]
-            port = cached_data["data"]["port"]
-            nat_type = cached_data["data"]["nat_type"]
-        else:
-            try:
-                # Fetch IP, Port, and NAT Type from STUN client
-                ip, port, nat_type = asyncio.run(self.stun_client.get_stun_info())
-
-                # Cache results
-                self.cache.cache_stun_info(user_id, ip, port, nat_type)
-            except Exception:
-                ip, port, nat_type = None, None, None
+    async def __call__(self, request):
+        try:
+            # Fetch STUN info asynchronously
+            stun_info = await self.stun_client.get_stun_info(request)
+            ip = stun_info['data']['ip']
+            port = stun_info['data']['port']
+            nat_type = stun_info['data']['nat_type']
+        except Exception:
+            ip, port, nat_type = None, None, None
 
         # Attach to request object
         request.original_ip = ip
         request.original_port = port
         request.nat_type = nat_type
 
-        return self.get_response(request)
+        return await self.get_response(request)
