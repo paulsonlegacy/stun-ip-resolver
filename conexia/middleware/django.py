@@ -20,4 +20,5 @@ class STUNIPMiddleware:
         request.original_port = port
         request.nat_type = nat_type
 
-        return await self.get_response(request)
+        response = await self.get_response(request)
+        return response

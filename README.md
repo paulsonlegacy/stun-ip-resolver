@@ -1,4 +1,4 @@
-# **📜 Conexio**  
+# **📜 conexia**  
 
 A Python library for fetching and caching a device's real **public IP address** using STUN (Session Traversal Utilities for NAT) servers. Supports **Redis, SQLite, File-based, and In-Memory caching** for fast lookups.
 
@@ -12,12 +12,12 @@ A Python library for fetching and caching a device's real **public IP address** 
 ## **📦 Installation**  
 
 ```bash
-pip install conexio
+pip install conexia
 ```
 or install from source:  
 ```bash
-git clone https://github.com/paulsonlegacy/conexio.git
-cd conexio
+git clone https://github.com/paulsonlegacy/conexia.git
+cd conexia
 pip install .
 ```
 
@@ -26,16 +26,18 @@ pip install .
 ## **⚡ Usage**
 ### **Basic Example**
 ```python
-from conexio import IPResolverCache
+from conexia.core import STUNClient
 
 # Choose a backend: "memory", "file", "sqlite", or "redis"
-cache = IPResolverCache(backend="file", ttl=300)
-
-# Store STUN info
-cache.cache_stun_info(user_id="device123", ip="192.168.1.10", port=3478, nat_type="Full Cone", timestamp=1691234567)
+# ttl is time to live in cache in seconds
+stun_client = STUNClient(backend="file", ttl=300)
 
 # Retrieve STUN info
-stun_info = cache.get_stun_info(user_id="device123")
+stun_info = stun_client.get_stun_info(user_id="device123")
+user_id = stun_client.get_user_id()
+public_ip = stun_client.get_public_ip()
+public_port = stun_client.get_public_port()
+nat_type = stun_client.get_nat_type()
 print(stun_info)
 ```
 
@@ -52,65 +54,166 @@ print(stun_info)
 }
 ```
 
-NB - User ID is optional as it is automatically generated if not provided
+*NB - User ID is optional as it is automatically generated if not provided*
+
 ---
 
 ## **🔌 Integrating with Django**
-1️⃣ **Install the package**  
-```bash
-pip install conexio
+
+Since Django runs on WSGI by default, you need to enable ASGI for async support in Django.
+
+#### **Using ASGI in Django**
+
+1️⃣ Ensure you have Django 3.2+ installed.  
+2️⃣ Create/modify asgi.py in Your Project Root - This file makes Django work asynchronously.
+
+
+```python
+import os
+from django.core.asgi import get_asgi_application
+
+os.environ.setdefault("DJANGO_SETTINGS_MODULE", "your_project.settings")  # Change "your_project"
+
+application = get_asgi_application()
 ```
-2️⃣ **Modify `settings.py`**  
+
+NB - The asgi.py file should be in the same folder as settings.py, which is inside your Django project directory (not the root folder with manage.py).
+
+```
+your_project/        # Django Project Folder
+│── manage.py
+│── your_project/    # Actual Django Project Package
+│   │── __init__.py
+│   │── settings.py
+│   │── urls.py
+│   │── asgi.py   # ✅ Place asgi.py here!
+│   │── wsgi.py
+│   └── ...
+│── app1/
+│── app2/
+│── ...
+```
+
+3️⃣ Install an ASGI server like daphne or uvicorn:
+
+```python
+pip install daphne
+```
+
+or
+
+```python
+pip install uvicorn
+```
+
+4️⃣ Run Django ASGI server:
+
+For daphne:
+
+```python
+daphne -b 0.0.0.0 -p 8000 your_project.asgi:application
+```
+
+For uvicorn:
+
+```python
+uvicorn your_project.asgi:application --host 0.0.0.0 --port 8000
+```
+
+5️⃣ Install the package
+
+```bash
+pip install conexia
+```
+
+6️⃣ Modify `settings.py`
+
 ```python
 # settings.py
 STUN_CACHE_BACKEND = "sqlite"  # Options: "memory", "file", "sqlite", "redis"
 STUN_CACHE_TTL = 300  # Cache expiry in seconds
 ```
 
-3️⃣ **Use in Django Views**  
+7️⃣ Use in Django Views
+
 ```python
 from django.http import JsonResponse
-from conexio import IPResolverCache
+from conexia.core import STUNClient
 
-cache = IPResolverCache(backend="sqlite", ttl=300)
+stun_client = STUNClient(backend="sqlite", ttl=300)
 
 def get_ip(request):
     user_id = str(request.user.id)  # Get unique user ID
-    stun_info = cache.get_stun_info(user_id)
+    stun_info = stun_client.get_stun_info(user_id)
     return JsonResponse(stun_info)
 ```
 
 ---
 
 ## **🌐 Integrating with Flask**
-1️⃣ **Install the package**  
-```bash
-pip install conexio
+
+Flask does not natively support ASGI, but you can enable async support using hypercorn or uvicorn.
+
+#### Async Support in Flask
+
+1️⃣ Install an ASGI server:
+
+```python
+pip install hypercorn
 ```
 
-2️⃣ **Create `app.py`**
+or
+
+```python
+pip install uvicorn
+```
+
+2️⃣ Create app.py
+
 ```python
 from flask import Flask, jsonify
-from conexio import IPResolverCache
+from conexia.core import STUNClient
+import asyncio
 
 app = Flask(__name__)
-cache = IPResolverCache(backend="redis", ttl=300)
+stun_client = STUNClient(backend="redis", ttl=300)
 
 @app.route("/get_ip/<user_id>")
-def get_ip(user_id):
-    stun_info = cache.get_stun_info(user_id)
+async def get_ip(user_id):
+    stun_info = await asyncio.to_thread(stun_client.get_stun_info, user_id)
     return jsonify(stun_info)
 
 if __name__ == "__main__":
-    app.run(debug=True)
+    try:
+        import hypercorn.asyncio
+        hypercorn.asyncio.serve(app, bind="0.0.0.0:8000")
+    except ImportError:
+        app.run(debug=True)  # Fallback to sync mode if hypercorn is not installed
 ```
-3️⃣ **Run the server**  
-```bash
+
+3️⃣ Choose how to run the server 
+
+Synchronous mode (default Flask WSGI):
+
+```python
 python app.py
 ```
 
-4️⃣ **Test API in browser or Postman**  
+Asynchronous mode (ASGI using hypercorn):
+
+```python
+hypercorn app:app --bind 0.0.0.0:8000
 ```
+
+Alternative ASGI server (uvicorn):
+
+```python
+uvicorn app:app --host 0.0.0.0 --port 8000
+```
+
+4️⃣ Test API in browser or Postman
+
+```bash
 http://127.0.0.1:5000/get_ip/device123
 ```
 
@@ -131,11 +234,11 @@ NB - Default is *file*
 ## **🔧 Clearing Cache**
 Clear cache for a specific user ID:  
 ```python
-cache.clear_cache(user_id="device123")
+stun_client.clear_cache(user_id="device123")
 ```
 Clear **all** cached data:  
 ```python
-cache.clear_cache()
+stun_client.clear_cache()
 ```
 
 ---
@@ -149,8 +252,8 @@ This project is licensed under the MIT License.
 1️⃣ **Fork the repository**  
 2️⃣ **Clone your fork**  
 ```bash
-git clone https://github.com/paulsonlegacy/conexio.git
-cd conexio
+git clone https://github.com/paulsonlegacy/conexia.git
+cd conexia
 ```
 3️⃣ **Create a feature branch**  
 ```bash
@@ -161,26 +264,16 @@ git checkout -b feature-name
 ---
 
 ## **🙌 Acknowledgments**
-🎉 **This library is dedicated to my mom - Monica Bosah, whose support made this possible.** ❤️  
+🎉 **This library is dedicated to my mom - Monica A. Bosah, whose support made this possible.** ❤️ 
 
 ---
 
 ## **🚀 Next Steps**
-- [ ] Add CLI tool for checking STUN info  
-- [ ] Improve performance for large-scale use  
-
----
-
-### **📌 Final Steps Before Uploading to PyPI**
-✅ **Ensure `setup.py` is correct**  
-✅ **Run tests**  
-✅ **Upload package**  
-```bash
-python setup.py sdist bdist_wheel
-twine upload dist/*
-```
+- [ ] Add other network parameters in fetched stun info
+- [ ] Stand-alone and environment simulated tests for middlewares
+- [ ] Signalling feature
 
 ---
 
 ### **💡 Want More Features?**
-If you have feature suggestions or bugs, open an issue on **[GitHub](https://github.com/paulsonlegacy/conexio/issues)**! 🚀  
+If you have feature suggestions or bugs, open an issue on **[GitHub](https://github.com/paulsonlegacy/conexia/issues)**! 🚀  
