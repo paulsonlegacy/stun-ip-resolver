@@ -1,15 +1,18 @@
-import asyncio, stun, sqlite3, time
+import asyncio, stun, sqlite3, time, random
 from conexia.cache import *
 from conexia.exceptions import STUNResolutionError
 from conexia.utils import get_user_id
+from conexia.utils import DEFAULT_STUN_SERVERS
 
 
 class STUNClient:
-    def __init__(self, stun_server="stun.l.google.com", stun_port=19302, cache_backend="file", ttl=300, **cache_kwargs): #TTL is in seconds
+    def __init__(self, stun_server=None, stun_port=None, cache_backend="file", ttl=300, **cache_kwargs): #TTL is in seconds
         """Initialize STUN client with caching support."""
-        self.stun_server = stun_server
-        self.stun_port = stun_port
+        server_count = random.randint(0, len(DEFAULT_STUN_SERVERS) - 1)
+        self.stun_server = stun_server or DEFAULT_STUN_SERVERS[server_count]["server"]
+        self.stun_port = int(stun_port or DEFAULT_STUN_SERVERS[server_count]["port"])
         self.cache = IPResolverCache(backend=cache_backend, ttl=ttl, **cache_kwargs)
+        print(f"Using STUN Server: {self.stun_server}, Port: {self.stun_port}")  # Debugging output
 
     def _get_cached_ips(self):
         """Retrieve all cached IPs based on backend type."""

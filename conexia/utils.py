@@ -1,9 +1,18 @@
-import os
-import uuid
-
+import os, uuid
 
 # Constants
 CACHE_FILE = os.path.expanduser("~/.stun_resolver_config")
+DEFAULT_STUN_SERVERS = [
+    {"server":"stun.l.google.com", "port":19302},
+    {"server":"stun1.l.google.com", "port":19302},
+    {"server":"stun2.l.google.com", "port":19302},
+    {"server":"stun3.l.google.com", "port":19302},
+    {"server":"stun4.l.google.com", "port":19302},
+    # {"server":"stun.stunprotocol.org", "port":3478},
+    # {"server":"stun.voipstunt.com", "port":3478},
+    # {"server":"stun.sipnet.net", "port":3478},
+    # {"server":"stun.twilio.com:3478", "port":3478}
+]
 
 # Functions
 def get_machine_uuid():
