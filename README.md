@@ -5,7 +5,8 @@ A Python library for fetching and caching a device's real **public IP address** 
 📌 **Why Use This?**  
 - Identifies real **public IP address** even behind NAT.  
 - Provides **multiple cache backends** (Redis, SQLite, File, Memory).  
-- **Works in Django, Flask, or standalone Python scripts**.  
+- **Works in Django, Flask, or standalone Python scripts**.
+- Automatic caching capability with minimal configuration.
 
 ---
 
@@ -126,26 +127,39 @@ uvicorn your_project.asgi:application --host 0.0.0.0 --port 8000
 pip install conexia
 ```
 
-6️⃣ Modify `settings.py`
+6️⃣ Enable the STUN Middleware in settings.py 
+Modify settings.py to activate the middleware and configure caching options:
 
 ```python
 # settings.py
+MIDDLEWARE = [
+    "django.middleware.security.SecurityMiddleware",
+    "django.contrib.sessions.middleware.SessionMiddleware",
+    "django.middleware.common.CommonMiddleware",
+    "django.middleware.csrf.CsrfViewMiddleware",
+    "django.contrib.auth.middleware.AuthenticationMiddleware",
+    "django.contrib.messages.middleware.MessageMiddleware",
+    "django.middleware.clickjacking.XFrameOptionsMiddleware",
+    
+    # ✅ Add Conexia Middleware
+    "conexia.middleware.django.STUNMiddleware",
+]
+
+# STUN Configuration
 STUN_CACHE_BACKEND = "sqlite"  # Options: "memory", "file", "sqlite", "redis"
 STUN_CACHE_TTL = 300  # Cache expiry in seconds
 ```
 
-7️⃣ Use in Django Views
+7️⃣ Access STUN data inside Django Views 
+Once the middleware is enabled, every request object will have the following attributes: 
 
 ```python
-from django.http import JsonResponse
-from conexia.core import STUNClient
-
-stun_client = STUNClient(backend="sqlite", ttl=300)
-
-def get_ip(request):
-    user_id = str(request.user.id)  # Get unique user ID
-    stun_info = stun_client.get_stun_info(user_id)
-    return JsonResponse(stun_info)
+def sample_view(request):
+    return JsonResponse({
+        "original_ip": request.original_ip,
+        "original_port": request.original_port,
+        "nat_type": request.nat_type
+    })
 ```
 
 ---
@@ -216,6 +230,32 @@ uvicorn app:app --host 0.0.0.0 --port 8000
 ```bash
 http://127.0.0.1:5000/get_ip/device123
 ```
+### ✅ Alternative Approach Using Flask Hooks 
+
+If you wanted to simulate middleware behavior in Flask, you could use Flask's before_request hook like this:
+
+```python
+from flask import Flask, g, request
+from conexia.core import STUNClient
+import asyncio
+
+app = Flask(__name__)
+stun_client = STUNClient(backend="redis", ttl=300)
+
+@app.before_request
+async def attach_stun_data():
+    user_id = request.args.get("user_id", "default_id")
+    stun_info = await asyncio.to_thread(stun_client.get_stun_info, user_id)
+    g.stun_info = stun_info  # Attach to global request context
+
+@app.route("/get_ip")
+async def get_ip():
+    return jsonify(g.stun_info)
+
+if __name__ == "__main__":
+    hypercorn.asyncio.serve(app, bind="0.0.0.0:8000")
+
+```
 
 ---
 
@@ -271,6 +311,7 @@ git checkout -b feature-name
 ## **🚀 Next Steps**
 - [ ] Add other network parameters in fetched stun info
 - [ ] Stand-alone and environment simulated tests for middlewares
+- [ ] Support for other python backend frameworks
 - [ ] Signalling feature
 
 ---

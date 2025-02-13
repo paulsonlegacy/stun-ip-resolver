@@ -1,12 +1,12 @@
 import unittest
 import asyncio
 from unittest.mock import AsyncMock, patch
-from conexia.middleware.django import STUNIPMiddleware
+from conexia.middleware.django import STUNMiddleware
 
-class TestSTUNIPMiddleware(unittest.TestCase):
+class TestSTUNMiddleware(unittest.TestCase):
     def setUp(self):
         """Set up ASGI middleware instance."""
-        self.middleware = STUNIPMiddleware(lambda req: req)
+        self.middleware = STUNMiddleware(lambda req: req)
 
     @patch("conexia.core.STUNClient.get_stun_info", new_callable=AsyncMock)
     def test_asgi_middleware_attaches_stun_info(self, mock_stun):

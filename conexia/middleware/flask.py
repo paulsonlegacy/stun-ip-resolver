@@ -3,7 +3,7 @@ from flask import request
 from conexia.core import STUNClient
 
 
-class STUNIPMiddleware:
+class STUNMiddleware:
     def __init__(self, app):
         self.app = app
         self.stun_client = STUNClient(cache_backend="file")

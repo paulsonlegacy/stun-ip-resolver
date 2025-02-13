@@ -1,13 +1,13 @@
 import unittest
 from unittest.mock import patch, AsyncMock
 from flask import Flask, request
-from conexia.middleware.flask import STUNIPMiddleware
+from conexia.middleware.flask import STUNMiddleware
 
-class TestSTUNIPMiddleware(unittest.TestCase):
+class TestSTUNMiddleware(unittest.TestCase):
     def setUp(self):
         """Set up Flask test app with STUN middleware."""
         self.app = Flask(__name__)
-        self.middleware = STUNIPMiddleware(self.app)
+        self.middleware = STUNMiddleware(self.app)
         self.client = self.app.test_client()
 
     @patch("conexia.core.STUNClient.get_stun_info", new_callable=AsyncMock)

@@ -1,9 +1,14 @@
+from django.conf import settings
 from conexia.core import STUNClient
 
-class STUNIPMiddleware:
+class STUNMiddleware:
     def __init__(self, get_response):
         self.get_response = get_response
-        self.stun_client = STUNClient(cache_backend="file")
+        # Load settings from Django settings.py
+        self.cache_backend = getattr(settings, "STUN_CACHE_BACKEND", "file")  # Default: "file"
+        self.cache_ttl = getattr(settings, "STUN_CACHE_TTL", 300)  # Default: 300 seconds
+        # Initialize the STUN client with the configured settings
+        self.stun_client = STUNClient(cache_backend=self.cache_backend, ttl=self.cache_ttl)
 
     async def __call__(self, request):
         try:

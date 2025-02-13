@@ -2,7 +2,7 @@ import unittest
 from unittest.mock import AsyncMock, patch
 from django.test import RequestFactory
 from django.conf import settings
-from conexia.middleware.django import STUNIPMiddleware
+from conexia.middleware.django import STUNMiddleware
 
 if not settings.configured:
     settings.configure(
@@ -20,7 +20,7 @@ class TestDjangoMiddleware(unittest.IsolatedAsyncioTestCase):
 
     async def asyncSetUp(self):
         """Setup middleware with mock response."""
-        self.middleware = STUNIPMiddleware(lambda req: req)
+        self.middleware = STUNMiddleware(lambda req: req)
         self.factory = RequestFactory()
 
     @patch("conexia.core.STUNClient.get_stun_info", new_callable=AsyncMock)
